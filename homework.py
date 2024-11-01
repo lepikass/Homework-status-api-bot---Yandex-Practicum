@@ -57,12 +57,12 @@ def get_api_answer(timestamp: int) -> dict | None:
         response = requests.get(ENDPOINT, headers=HEADERS, params=payload)
         if response.status_code != 200:
             logging.error(f'Ошибка API: {response.status_code}')
-            send_message(bot, f'Ошибка API: {response.status_code}')
+            send_message(f'Ошибка API: {response.status_code}')
             return None
         return response.json()
     except Exception as e:
         logging.error(f'Ошибка при запросе к API: {e}')
-        send_message(bot, f'Ошибка при запросе к API: {e}')
+        send_message(f'Ошибка при запросе к API: {e}')
         return None
 
 
