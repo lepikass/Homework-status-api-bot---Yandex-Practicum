@@ -4,7 +4,6 @@ import time
 import requests
 from dotenv import load_dotenv
 from telebot import TeleBot
-from typing import Optional, Dict
 
 # Настройка логирования
 logging.basicConfig(
@@ -21,7 +20,7 @@ load_dotenv()
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
-RETRY_PERIOD = 15  # Период повторных попыток в секундах
+RETRY_PERIOD = 600  # Период повторных попыток в секундах
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
@@ -36,10 +35,8 @@ HOMEWORK_VERDICTS = {
 def check_tokens() -> bool:
     """Проверяет наличие необходимых токенов."""
     if not PRACTICUM_TOKEN or not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        logging.critical(
-            'Отсутствует переменная окружения: "PRACTICUM_TOKEN", '
-            '"TELEGRAM_TOKEN" или "TELEGRAM_CHAT_ID".'
-        )
+        logging.critical('Отсутствует переменная окружения: "PRACTICUM_TOKEN",'
+                         '"TELEGRAM_TOKEN" или "TELEGRAM_CHAT_ID".')
         return False
     return True
 
@@ -53,17 +50,19 @@ def send_message(bot: TeleBot, message: str) -> None:
         logging.error(f'Ошибка при отправке сообщения в Telegram: {e}')
 
 
-def get_api_answer(timestamp: int) -> Optional[Dict]:
+def get_api_answer(timestamp: int) -> dict | None:
     """Запрашивает данные о статусах домашних работ из API."""
     payload = {'from_date': timestamp}
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=payload)
         if response.status_code != 200:
             logging.error(f'Ошибка API: {response.status_code}')
+            send_message(bot, f'Ошибка API: {response.status_code}')
             return None
         return response.json()
     except Exception as e:
         logging.error(f'Ошибка при запросе к API: {e}')
+        send_message(bot, f'Ошибка при запросе к API: {e}')
         return None
 
 
