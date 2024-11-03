@@ -37,13 +37,14 @@ last_error = None  # Переменная для отслеживания пос
 
 def check_tokens() -> bool:
     """Проверяет наличие необходимых токенов."""
-    missing_tokens = []
-    if not PRACTICUM_TOKEN:
-        missing_tokens.append("PRACTICUM_TOKEN")
-    if not TELEGRAM_TOKEN:
-        missing_tokens.append("TELEGRAM_TOKEN")
-    if not TELEGRAM_CHAT_ID:
-        missing_tokens.append("TELEGRAM_CHAT_ID")
+    tokens = {
+        "PRACTICUM_TOKEN": PRACTICUM_TOKEN,
+        "TELEGRAM_TOKEN": TELEGRAM_TOKEN,
+        "TELEGRAM_CHAT_ID": TELEGRAM_CHAT_ID
+    }
+
+    missing_tokens = [name for name, value in tokens.items() if not value]
+
     if missing_tokens:
         logger.critical(
             f'Отсутствуют переменные окружения: {", ".join(missing_tokens)}.'
@@ -64,17 +65,30 @@ def send_message(bot: TeleBot, message: str) -> None:
 def get_api_answer(timestamp: int) -> dict:
     """Запрашивает данные о статусах домашних работ из API."""
     payload = {'from_date': timestamp}
+
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=payload)
+
         if response.status_code != 200:
             logger.error(
                 f'Эндпоинт {ENDPOINT} недоступен. '
-                f'Код ответа API: {response.status_code}'
+                f'Код ответа API: {response.status_code}. '
+                f'Ответ: {response.text}. '
+                f'Параметры запроса: {payload}'
             )
             raise Exception(f'Ошибка API: {response.status_code}')
+
+        logger.debug(
+            f'Успешный ответ API: {response.json()}. '
+            f'Параметры запроса: {payload}'
+        )
         return response.json()
+
     except requests.RequestException as e:
-        logger.error(f'Ошибка при запросе к API: {e}')
+        logger.error(
+            f'Ошибка при запросе к API: {e}. '
+            f'Параметры запроса: {payload}'
+        )
         return None
 
 
@@ -96,11 +110,9 @@ def parse_status(homework: dict) -> str:
     """Извлекает и возвращает статус домашней работы."""
     homework_name = homework.get('homework_name')
     if homework_name is None:
-        logger.error('Отсутствует ключ "homework_name" в домашней работе.')
         raise KeyError('Отсутствует ключ "homework_name".')
     status = homework.get('status')
     if status not in HOMEWORK_VERDICTS:
-        logger.error(f'Неожиданный статус домашней работы: {status}')
         raise ValueError(f'Неизвестный статус: {status}')
     verdict = HOMEWORK_VERDICTS[status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
@@ -133,16 +145,16 @@ def main() -> None:
             else:
                 logger.debug('Отсутствие новых статусов.')
 
-            timestamp = int(time.time())
+            timestamp = response.get('current_date', timestamp)
             time.sleep(RETRY_PERIOD)
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            logger.error(message)
-
             if last_error != str(error):
+                logger.error(message)
                 send_message(bot, message)
                 last_error = str(error)
-
+            else:
+                logger.debug(f'Повторная ошибка: {error}')
             time.sleep(RETRY_PERIOD)
 
 
