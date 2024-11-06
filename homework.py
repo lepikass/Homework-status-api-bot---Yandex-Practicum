@@ -65,22 +65,31 @@ def send_message(bot: TeleBot, message: str) -> None:
 def get_api_answer(timestamp: int) -> dict:
     """Запрашивает данные о статусах домашних работ из API."""
     payload = {'from_date': timestamp}
+
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=payload)
 
         if response.status_code != 200:
-            raise ConnectionError(
+            logger.error(
                 f'Эндпоинт {ENDPOINT} недоступен. '
                 f'Код ответа API: {response.status_code}. '
-                f'Ответ: {response.text}. Параметры запроса: {payload}'
+                f'Ответ: {response.text}. '
+                f'Параметры запроса: {payload}'
             )
+            raise Exception(f'Ошибка API: {response.status_code}')
 
+        logger.debug(
+            f'Успешный ответ API: {response.json()}. '
+            f'Параметры запроса: {payload}'
+        )
         return response.json()
+
     except requests.RequestException as e:
-        raise ConnectionError(
+        logger.error(
             f'Ошибка при запросе к API: {e}. '
             f'Параметры запроса: {payload}'
         )
+        return None
 
 
 def check_response(response: dict) -> list:
@@ -113,49 +122,34 @@ def main() -> None:
     """Основная логика работы бота."""
     global last_error
     if not check_tokens():
-        logger.critical('Отсутствуют необходимые переменные окружения.')
         return
 
     bot = TeleBot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
+
     logger.info('Бот запущен и работает.')
 
     while True:
         try:
             logger.info('Запрос к API...')
             response = get_api_answer(timestamp)
-            homeworks = check_response(response)
-            if homeworks:
-                for homework in homeworks:
-                    message = parse_status(homework)
-                    try:
+            if response is not None:
+                homeworks = check_response(response)
+                if homeworks:
+                    for homework in homeworks:
+                        message = parse_status(homework)
                         send_message(bot, message)
-                        logger.debug(f'Бот отправил сообщение: "{message}"')
-                    except Exception as e:
-                        logger.error(f'Ошибка при отправке сообщения: {e}')
-            else:
-                logger.debug('Отсутствие новых статусов.')
-
-            timestamp = response.get('current_date', timestamp)
-
-        except ConnectionError as error:
+                else:
+                    logger.debug('Отсутствие новых статусов.')
+                timestamp = response.get('current_date', timestamp)
+        except Exception as error:
             message = f'Сбой в работе программы: {error}'
             if last_error != str(error):
                 logger.error(message)
-                try:
-                    send_message(bot, message)
-                except Exception as send_error:
-                    logger.error(
-                        f'Ошибка при отправке '
-                        f'сообщения об ошибке: {send_error}'
-                    )
+                send_message(bot, message)
                 last_error = str(error)
             else:
                 logger.debug(f'Повторная ошибка: {error}')
-
-        except Exception as error:
-            logger.error(f'Неизвестная ошибка: {error}')
-
         finally:
             time.sleep(RETRY_PERIOD)
 
