@@ -32,8 +32,6 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-last_error = None  # Переменная для отслеживания последней ошибки
-
 
 def check_tokens() -> bool:
     """Проверяет наличие необходимых токенов."""
@@ -95,13 +93,10 @@ def get_api_answer(timestamp: int) -> dict:
 def check_response(response: dict) -> list:
     """Проверяет корректность ответа API и возвращает список домашних работ."""
     if not isinstance(response, dict):
-        logger.error('Ответ API должен быть словарём.')
         raise TypeError('Ответ API должен быть словарём.')
     if 'homeworks' not in response:
-        logger.error('Отсутствует ключ "homeworks" в ответе API.')
         raise KeyError('Отсутствует ключ "homeworks".')
     if not isinstance(response['homeworks'], list):
-        logger.error('Ключ "homeworks" должен быть списком.')
         raise TypeError('Ключ "homeworks" должен быть списком.')
     return response['homeworks']
 
@@ -133,26 +128,26 @@ def main() -> None:
         try:
             logger.info('Запрос к API...')
             response = get_api_answer(timestamp)
-            if response is not None:
-                homeworks = check_response(response)
-                if homeworks:
-                    for homework in homeworks:
-                        message = parse_status(homework)
-                        send_message(bot, message)
-                else:
-                    logger.debug('Отсутствие новых статусов.')
-                timestamp = response.get('current_date', timestamp)
-        except Exception as error:
-            message = f'Сбой в работе программы: {error}'
-            if last_error != str(error):
-                logger.error(message)
-                send_message(bot, message)
-                last_error = str(error)
+            if response is None:
+                continue
+
+            homeworks = check_response(response)
+            if homeworks:
+                for homework in homeworks:
+                    message = parse_status(homework)
+                    send_message(bot, message)
             else:
-                logger.debug(f'Повторная ошибка: {error}')
+                logger.debug('Отсутствие новых статусов.')
+
+            timestamp = response.get('current_date', timestamp)
+
+        except (TypeError, KeyError, Exception) as error:
+            if isinstance(error, TypeError):
+                message = f'Ошибка типа: {error}'
+            elif isinstance(error, KeyError):
+                message = f'Отсутствует ключ в ответе: {error}'
+            else:
+                message = f'Сбой в работе программы: {error}'
+
         finally:
             time.sleep(RETRY_PERIOD)
-
-
-if __name__ == '__main__':
-    main()
